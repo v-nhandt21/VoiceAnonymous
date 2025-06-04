@@ -1,0 +1,3 @@
+resource/*
+extractor/s3prl_module/*
+modules/emotion/wav2vec2_checkpoints/*

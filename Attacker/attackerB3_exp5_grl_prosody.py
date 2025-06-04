@@ -1,0 +1,95 @@
+import torch, torchaudio
+import sys
+import soundfile as sf
+import torch.nn.functional as F
+from torchaudio.transforms import Resample
+import torch.nn as nn
+
+from extractor.ecapa_tdnn import ECAPA_TDNN_SMALL
+
+from models.MHFA import MHFA
+from modules.wavlm.inference import load_model, get_full_layer_feature, get_feature_average_layer
+
+from modules.gradient_reversal import GradientReversal
+
+device = "cuda"
+
+class WavlmEcapaExtractor(torch.nn.Module):
+     def __init__(self):
+          super().__init__()
+          checkpoint = "/Data3-Processing/nhandt23_bk/VoiceAnonymous/Attacker/resource/pretrain/wavlm_large_finetune.pth"
+          config_path = None 
+          config_path = "/Data3-Processing/nhandt23_bk/VoiceAnonymous/Attacker/resource/pretrain/WavLM-Large.pt"
+          self.extractor = ECAPA_TDNN_SMALL(feat_dim=1024, feat_type='wavlm_large', config_path=config_path)
+          state_dict = torch.load(checkpoint, map_location=lambda storage, loc: storage)
+          self.extractor.load_state_dict(state_dict['model'], strict=False)
+          self.extractor.eval()
+     
+     def forward(self, wav):
+          with torch.no_grad():
+               emb = self.extractor(wav)
+          return emb
+
+class AttackerB3(torch.nn.Module):
+     def __init__(self):
+          super().__init__()
+          self.wavlm_ecapa_extractor = WavlmEcapaExtractor()
+
+          self.wavlm_pretrain = load_model('/Data3-Processing/nhandt23_bk/VoiceAnonymous/Attacker/resource/pretrain/WavLM-Large.pt')
+
+          self.mhfa = MHFA()
+
+          self.fc_pitch = nn.Linear(1024, 1)
+          self.grl_pitch = GradientReversal(alpha=1.)
+
+          self.fc_energy = nn.Linear(1024, 1)
+          self.grl_energy = GradientReversal(alpha=1.)
+
+     def forward(self, anon_path_waveform, orig_path_waveform=None):
+
+          average_feature = get_feature_average_layer(self.wavlm_pretrain, anon_path_waveform)
+
+          pitch = self.fc_pitch(average_feature)
+          pitch = self.grl_pitch(pitch)
+
+          energy = self.fc_energy(average_feature)
+          energy = self.grl_energy(energy)
+
+          feature = get_full_layer_feature(self.wavlm_pretrain, anon_path_waveform)
+
+          predict_orig_emb = self.mhfa(feature)
+
+          if orig_path_waveform is not None:
+               orig_emb = self.wavlm_ecapa_extractor(orig_path_waveform)
+          else:
+               orig_emb = None
+
+          return predict_orig_emb, orig_emb, energy, pitch
+
+if __name__ == "__main__":
+
+     model = AttackerB3()
+
+     wav, sr = sf.read("/Data1-Raw/nhandt23/VoicePrivacy/Attacker/test1.wav")
+     wav = torch.from_numpy(wav).unsqueeze(0).float()
+     resample = Resample(orig_freq=sr, new_freq=16000)
+     wav = resample(wav)
+
+     wav = torch.Tensor(2,48000)
+
+     wav2, sr = sf.read("/Data1-Raw/nhandt23/VoicePrivacy/Attacker/test2.wav")
+     wav2 = torch.from_numpy(wav2).unsqueeze(0).float()
+     resample = Resample(orig_freq=sr, new_freq=16000)
+     wav2 = resample(wav2)
+
+     wav2 = torch.Tensor(2,48000)
+
+     wav = wav.to(device)
+     wav2 = wav2.to(device)
+     model.to(device)
+
+     output = model(wav, wav2)
+
+     output = output[0].detach().cpu()
+
+     print(output.shape)
