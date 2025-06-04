@@ -2,17 +2,7 @@
 
 **Paper:** *Leveraging Multi-Head Factorized Attentive Reconstructor and Gradient Reversal for Random Prosody Anonymization - Voice Privacy Challenge*
 
----
-
-## 🔧 Setup
-
-Ensure you have `conda` installed. Then, run the following command to install the necessary dependency:
-
-```bash
-conda install 'ffmpeg<5'
-```
-
----
+[Report](https://v-nhandt21.github.io/portfolio/voiceprivacy/)
 
 ## 🔐 Data and Model Download
 
