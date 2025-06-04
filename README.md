@@ -4,6 +4,10 @@
 
 [Report](https://v-nhandt21.github.io/portfolio/voiceprivacy/)
 
+[Train Script](https://github.com/v-nhandt21/VoiceAnonymous/blob/main/Attacker/Makefile)
+
+[Attack Script](https://github.com/v-nhandt21/VoiceAnonymous/blob/main/evaluation/privacy/asv/speaker_extraction_attackerB3.py)
+
 ## 🔐 Data and Model Download
 
 > **Download Password:** `getdata`
