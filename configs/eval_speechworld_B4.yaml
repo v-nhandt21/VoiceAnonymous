@@ -1,0 +1,36 @@
+data_dir: /Data3-Processing/nhandt23_bk/VoiceAnonymous/DATA/B4/data
+exp_dir: /Data3-Processing/nhandt23_bk/VoiceAnonymous/DATA/B4/exp_attacker
+
+anon_data_suffix: _B4 # added to transform data/libri_dev/ to data/libri_dev_mcadams/ with data/libri_dev_mcadams/wav/*wav
+
+results_summary_path: !ref <exp_dir>/results_summary/eval_orig<anon_data_suffix>/results_orig.txt
+
+datasets:
+  - name: libri_dev
+    data: libri_dev
+    enrolls: [_enrolls]
+    trials: [_trials_f, _trials_m]
+  - name: libri_test
+    data: libri_test
+    enrolls: [_enrolls]
+    trials: [_trials_f, _trials_m]
+
+
+eval_steps:  # all metrics in this list will be computed in the evaluation. Remove entry to skip
+  privacy:
+    - asv
+
+privacy:
+  asv:
+    dataset_name: [libri_dev, libri_test]
+    model_name: asv_anon_B3
+    model_type: ecapa
+
+    evaluation:
+      model_dir: /data1/nhandt23/VoicePrivacy/Voice-Privacy-Challenge-2024/exp/asv_orig  # path to existing ASV model or output for trained ASV model
+      results_dir: !ref <exp_dir>/<privacy[asv][model_name]>  # path to save evaluation results
+      distance: cosine  # cosine or plda
+      plda:   # ignored if distance is not plda
+        model_dir: null  # path to trained PLDA or output of PLDA training
+        train_data_dir: null # path to PLDA training data
+        anon: null # trained on anonymized (true) or original (false) data

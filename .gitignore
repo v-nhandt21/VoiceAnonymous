@@ -152,3 +152,7 @@ anonymization/modules/nac/coqui_tts/
 .install-hash*
 utils/dropbox_uploader.sh
 .vpc-dropbox_uploader
+
+DATA/*
+Attacker/resource/*
+Attacker/modules/wavlm/WavLM-Large.pt

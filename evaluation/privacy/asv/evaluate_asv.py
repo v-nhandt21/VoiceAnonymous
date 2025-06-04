@@ -11,6 +11,11 @@ def evaluate_asv(eval_datasets, eval_data_dir, params, device, anon_data_suffix,
     if backend == 'speechbrain':
         return asv_eval_speechbrain(eval_datasets=eval_datasets, eval_data_dir=eval_data_dir, params=params,
                                     device=device, anon_data_suffix=anon_data_suffix, model_dir=model_dir)
+    
+    elif backend == 'speechworld':
+        return asv_eval_speechbrain(eval_datasets=eval_datasets, eval_data_dir=eval_data_dir, params=params,
+                                    device=device, anon_data_suffix=anon_data_suffix, model_dir=model_dir)
+    
     else:
         raise ValueError(f'Unknown backend {backend} for ASR evaluation. Available backends: speechbrain.')
 
@@ -22,7 +27,7 @@ def asv_eval_speechbrain(eval_datasets, eval_data_dir, params, device, anon_data
     asv = ASV(model_dir=model_dir, device=device, score_save_dir=save_dir / f'{params["evaluation"]["distance"]}_out', distance=params['evaluation']['distance'],
               plda_settings=params['evaluation']['plda'], vec_type=params['model_type'])
 
-    attack_scenarios = ['oo', 'oa', 'aa']
+    attack_scenarios = ['aa'] # ['oo', 'oa', 'aa']
     get_suffix = lambda x: f'{anon_data_suffix}' if x == 'a' else ''
     results = []
 
@@ -46,5 +51,6 @@ def asv_eval_speechbrain(eval_datasets, eval_data_dir, params, device, anon_data
 
     results_df = pd.DataFrame(results)
     print(results_df)
+    print("Save to: ", save_dir / f'results{anon_data_suffix}.csv')
     results_df.to_csv(save_dir / f'results{anon_data_suffix}.csv')
     return results_df

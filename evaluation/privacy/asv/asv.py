@@ -6,9 +6,11 @@ from speechbrain.utils.metric_stats import EER
 from sklearn.metrics.pairwise import cosine_distances
 import pandas as pd
 
-from .utils import PLDAModel
+# from .utils import PLDAModel
 from .speaker_extraction import SpeakerExtraction
 from utils import write_table, read_kaldi_format, save_kaldi_format, setup_logger
+
+import tqdm, os
 
 logger = setup_logger(__name__)
 
@@ -32,9 +34,22 @@ class ASV:
             self.plda_train_data_dir = None
             self.plda_anon = None
 
-        self.extractor = SpeakerExtraction(results_dir=self.score_save_dir / 'emb_xvect',
-                                           devices=[self.device],
-                                           settings={'vec_type': vec_type, 'emb_level': 'utt', 'emb_model_path': model_dir})
+        self.use_custom = True
+        self.attacker_system = 3
+
+        if self.use_custom:
+            if self.attacker_system == 0:
+                from .speaker_extraction_custom import SpeakerExtractionCustom
+                self.extractor = SpeakerExtractionCustom()
+            elif self.attacker_system == 3:
+                from .speaker_extraction_attackerB3 import SpeakerExtractionCustom
+                self.extractor = SpeakerExtractionCustom()
+        else:
+            self.extractor = SpeakerExtraction(results_dir=self.score_save_dir / 'emb_xvect',
+                                            devices=[self.device],
+                                            settings={'vec_type': vec_type, 'emb_level': 'utt', 'emb_model_path': model_dir})
+            
+            
 
     def compute_trial_scores(self, trials, enrol_indices, test_indices, out_file, sim_scores):
         scores = []
@@ -86,8 +101,12 @@ class ASV:
     def eer_compute(self, enrol_dir, test_dir, trial_runs_file):
         # Compute all enrol(spk level) and Test(utt level) embeddings
         # enroll vectors are the speaker-level average vectors
-        enrol_all_dict = self.extractor.extract_speakers(dataset_path=Path(enrol_dir), emb_level='spk')
-        test_all_dict = self.extractor.extract_speakers(dataset_path=Path(test_dir), emb_level='utt')
+
+        use_custom = self.use_custom
+
+        if not use_custom:
+            enrol_all_dict = self.extractor.extract_speakers(dataset_path=Path(enrol_dir), emb_level='spk')
+            test_all_dict = self.extractor.extract_speakers(dataset_path=Path(test_dir), emb_level='utt')
 
         enrol_vectors = []
         enrol_ids = []
@@ -97,21 +116,35 @@ class ASV:
         # 1462 1462-170142-0000 target
         # 1462 2412-153948-0004 nontarget
         with open(trial_runs_file, 'r') as f:
-            for line in f:
+            for line in tqdm.tqdm(f):
                 temp = line.strip().split(' ')
                 if temp[0] not in set(enrol_ids):
-                    enrol_vectors.append(enrol_all_dict.get_embedding_for_identifier(temp[0]))
+                    if not use_custom:
+                        enrol_vectors.append(enrol_all_dict.get_embedding_for_identifier(temp[0]))
+                    else:
+                        enrol_vectors.append(self.extractor.get_embedding(Path(enrol_dir), temp[0], emb_level='spk'))
                     enrol_ids.append(temp[0])
+                    
+                    # print(temp[0], enrol_all_dict.get_embedding_for_identifier(temp[0]).shape)
+                
                 if temp[1] not in set(test_ids):
-                    test_vectors.append(test_all_dict.get_embedding_for_identifier(temp[1]))
+                    if not use_custom:
+                        test_vectors.append(test_all_dict.get_embedding_for_identifier(temp[1]))
+                    else:
+                        test_vectors.append(self.extractor.get_embedding(Path(test_dir), temp[1], emb_level='utt'))
                     test_ids.append(temp[1])
+
+                    # print(temp[1], test_all_dict.get_embedding_for_identifier(temp[1]).shape)
+
                 trials[(temp[0], temp[1])] = int(temp[2] == 'target')
 
         enrol_vectors = torch.stack(enrol_vectors)
         test_vectors = torch.stack(test_vectors)
 
         save_dir = Path(self.score_save_dir.parent, f'{Path(enrol_dir).name}-{Path(test_dir).name}')
-        save_dir.mkdir(exist_ok=True)
+
+        os.makedirs(save_dir, exist_ok=True)
+        # save_dir.mkdir(exist_ok=True)
 
         sim_scores, enrol_indices, test_indices = self.compute_distances(enrol_vectors=enrol_vectors,
                                                                          enrol_ids=enrol_ids,
@@ -134,30 +167,31 @@ class ASV:
 
     def compute_distances(self, enrol_vectors, enrol_ids, test_vectors, test_ids):
         if self.distance == 'plda':
-            """Computes the Equal Error Rate give the PLDA scores"""
-            # Create ids, labels, and scoring list for EER evaluation
-            if self.plda_model_dir.exists():
-                self.plda = PLDAModel(train_embeddings=None, results_path=self.plda_model_dir)
-            else:
-                logger.info('Train PLDA model...')
+            a = 0
+            # """Computes the Equal Error Rate give the PLDA scores"""
+            # # Create ids, labels, and scoring list for EER evaluation
+            # if self.plda_model_dir.exists():
+            #     self.plda = PLDAModel(train_embeddings=None, results_path=self.plda_model_dir)
+            # else:
+            #     logger.info('Train PLDA model...')
 
-                plda_data_dir = self.plda_train_data_dir
-                if self.plda_anon:
-                    plda_data_dir = Path(f'{plda_data_dir}_selected')
-                    self.select_data_for_plda(all_data_dir=self.plda_train_data_dir,
-                                              selected_data_dir=self.model_dir.parent,
-                                              out_dir=plda_data_dir)
-                logger.info(f'Using data under {plda_data_dir}')
+            #     plda_data_dir = self.plda_train_data_dir
+            #     if self.plda_anon:
+            #         plda_data_dir = Path(f'{plda_data_dir}_selected')
+            #         self.select_data_for_plda(all_data_dir=self.plda_train_data_dir,
+            #                                   selected_data_dir=self.model_dir.parent,
+            #                                   out_dir=plda_data_dir)
+            #     logger.info(f'Using data under {plda_data_dir}')
 
-                train_dict = self.extractor.extract_speakers(dataset_path=plda_data_dir, emb_level='utt')
-                self.plda = PLDAModel(train_embeddings=train_dict, results_path=self.plda_model_dir)
+            #     train_dict = self.extractor.extract_speakers(dataset_path=plda_data_dir, emb_level='utt')
+            #     self.plda = PLDAModel(train_embeddings=train_dict, results_path=self.plda_model_dir)
 
-            plda_score_object = self.plda.compute_distance(enrollment_vectors=enrol_vectors, enrollment_ids=enrol_ids,
-                                                           trial_vectors=test_vectors, trial_ids=test_ids,
-                                                           return_object=True)
-            sim_scores = plda_score_object.scoremat
-            enrol_indices = dict(zip(plda_score_object.modelset, range(len(enrol_ids))))
-            test_indices = dict(zip(plda_score_object.segset, range(len(test_ids))))
+            # plda_score_object = self.plda.compute_distance(enrollment_vectors=enrol_vectors, enrollment_ids=enrol_ids,
+            #                                                trial_vectors=test_vectors, trial_ids=test_ids,
+            #                                                return_object=True)
+            # sim_scores = plda_score_object.scoremat
+            # enrol_indices = dict(zip(plda_score_object.modelset, range(len(enrol_ids))))
+            # test_indices = dict(zip(plda_score_object.segset, range(len(test_ids))))
 
         else:
             """Computes the Equal Error Rate give the cosine score"""
